@@ -8,7 +8,8 @@ async function getLesson(req, res, next) {
   if (lang && lesson.contentTranslations && lesson.contentTranslations.get(lang)) {
     return res.json({ ...lesson, content: lesson.contentTranslations.get(lang).text, lang });
   }
-  res.json({ ...lesson, content: lesson.contentOriginal, lang: lesson.language || 'original' });
+  // fixed: use languageOriginal field
+  res.json({ ...lesson, content: lesson.contentOriginal, lang: lesson.languageOriginal || 'original' });
 }
 
 async function createLesson(req, res, next) {
