@@ -1,23 +1,55 @@
 import React from 'react'
 import CourseCard from '../components/CourseCard'
 import ProgressBar from '../components/ProgressBar'
-import { getCourses, me } from '../api'
+import { getCourses, getProgress, me, translate } from '../api'
 
 export default function Dashboard(){
   const [user,setUser] = React.useState(null)
   const [courses,setCourses] = React.useState([])
+  const [progress,setProgress] = React.useState([])
+  const [lang,setLang] = React.useState(localStorage.getItem('mlp_lang') || 'en')
   const [loading,setLoading] = React.useState(true)
 
   React.useEffect(()=>{
     let mounted = true
-    Promise.all([me(), getCourses()]).then(([u, cs])=>{
-      if (!mounted) return
-      setUser(u)
-      setCourses(cs)
-      setLoading(false)
-    }).catch(()=> setLoading(false))
-    return ()=> mounted = false
-  },[])
+
+    async function loadDashboard() {
+      try {
+        const [u, cs, ps] = await Promise.all([me(), getCourses(), getProgress().catch(() => [])])
+        const localizedCourses = lang === 'en'
+          ? cs
+          : await Promise.all(cs.map(async course => {
+            if (!course.descriptionOriginal) return course
+            const result = await translate({
+              sourceType: 'course',
+              sourceId: course._id,
+              text: course.descriptionOriginal,
+              targetLang: lang
+            })
+            return { ...course, descriptionOriginal: result.translatedText }
+          }))
+
+        if (!mounted) return
+        setUser(u)
+        setCourses(localizedCourses)
+        setProgress(ps)
+        setLoading(false)
+      } catch {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    loadDashboard()
+    function onLanguageChange(event) {
+      if (event?.detail) setLang(event.detail)
+    }
+    window.addEventListener('mlp:lang', onLanguageChange)
+
+    return ()=> {
+      mounted = false
+      window.removeEventListener('mlp:lang', onLanguageChange)
+    }
+  },[lang])
 
   if (loading) return <div className="page">Loading...</div>
 
@@ -54,7 +86,7 @@ export default function Dashboard(){
             <h4>{c.title}</h4>
             <p className="muted">{c.descriptionOriginal}</p>
             <div style={{marginTop:8}}>
-              <ProgressBar value={Math.floor(Math.random()*80)+10} />
+              <ProgressBar value={c.lessons?.length ? Math.round((progress.filter(p=>p.courseId === c._id && p.completed).length / c.lessons.length) * 100) : 0} />
             </div>
             <div style={{marginTop:8}}>
               <a className="btn" href={`/courses/${c._id}`}>Continue</a>

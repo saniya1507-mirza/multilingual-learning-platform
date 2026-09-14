@@ -63,7 +63,7 @@ export default function Lesson() {
         lesson.description ||
         ''
 
-      const result = await explain(text, lang)
+      const result = await explain({ text, targetLang: lang })
 
       setExplainText(
         result?.text ||
