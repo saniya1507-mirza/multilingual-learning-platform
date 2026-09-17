@@ -32,69 +32,101 @@ export default function Quiz() {
     }
   }, [])
 
+  async function safeTranslate(params, fallback) {
+    try {
+      const result = await translate(params)
+
+      return result?.translatedText || fallback
+    } catch (error) {
+      console.error('Translation failed:', error)
+
+      // Translation failure must not stop the quiz.
+      return fallback
+    }
+  }
+
   async function loadQuiz() {
     try {
       setError('')
+      setQuiz(null)
 
+      // Always load the original quiz first.
       const q = await getQuiz(id)
 
+      const originalQuestions = q.questions || []
+
+      // English does not need translation.
       if (lang === 'en') {
         setQuiz(q)
         setAnswers(
-          new Array(q.questions.length).fill(null)
+          new Array(originalQuestions.length).fill(null)
         )
         return
       }
 
-      const translatedTitle = await translate({
-        sourceType: 'quiz',
-        sourceId: q._id,
-        text: q.title,
-        targetLang: lang
-      })
+      // Translate the quiz title safely.
+      const translatedTitle = await safeTranslate(
+        {
+          sourceType: 'quiz',
+          sourceId: q._id,
+          text: q.title || '',
+          targetLang: lang
+        },
+        q.title || ''
+      )
 
+      // Translate every question and choice.
       const translatedQuestions = await Promise.all(
-        q.questions.map(async (question) => {
-          const translatedQuestion = await translate({
-            sourceType: 'quiz-question',
-            sourceId: question._id,
-            text: question.text,
-            targetLang: lang
-          })
+        originalQuestions.map(async (question) => {
+
+          const translatedQuestion = await safeTranslate(
+            {
+              sourceType: 'quiz-question',
+              sourceId: question._id,
+              text: question.text || '',
+              targetLang: lang
+            },
+            question.text || ''
+          )
 
           const translatedChoices = await Promise.all(
-            question.choices.map((choice, index) =>
-              translate({
-                sourceType: 'quiz-choice',
-                sourceId: `${question._id}-${index}`,
-                text: choice,
-                targetLang: lang
-              })
+            (question.choices || []).map(
+              async (choice, index) => {
+
+                return safeTranslate(
+                  {
+                    sourceType: 'quiz-choice',
+                    sourceId: `${question._id}-${index}`,
+                    text: choice || '',
+                    targetLang: lang
+                  },
+                  choice || ''
+                )
+              }
             )
           )
 
           return {
             ...question,
-            text: translatedQuestion.translatedText,
-            choices: translatedChoices.map(
-              item => item.translatedText
-            )
+            text: translatedQuestion,
+            choices: translatedChoices
           }
         })
       )
 
       setQuiz({
         ...q,
-        title: translatedTitle.translatedText,
+        title: translatedTitle,
         questions: translatedQuestions
       })
 
       setAnswers(
-        new Array(q.questions.length).fill(null)
+        new Array(originalQuestions.length).fill(null)
       )
 
     } catch (err) {
       console.error('Quiz loading error:', err)
+
       setError('Unable to load quiz.')
     }
   }
@@ -110,7 +142,6 @@ export default function Quiz() {
   async function submit() {
     if (submitting) return
 
-    // Make sure every question has an answer
     const unanswered = answers.some(
       answer => answer === null
     )
