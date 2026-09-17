@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://multilingual-learning-platform.onrender.com'
+const API_BASE_URL = 'https://multilingual-learning-platform.onrender.com/api'
 
 async function request(path, options = {}) {
   const token = localStorage.getItem('token')
