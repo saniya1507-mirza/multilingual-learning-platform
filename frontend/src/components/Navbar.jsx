@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { FaSearch } from 'react-icons/fa'
 import LanguageSelector from './LanguageSelector'
 import { logout } from '../api'
 
@@ -63,44 +64,32 @@ export default function Navbar() {
 
   return (
     <header className="navbar">
-
       <div className="nav-left">
-
-        <Link to="/" className="brand">
-          MLP
+        <Link to="/" className="brand" aria-label="MLP home">
+          <span className="brand-mark">MLP</span>
         </Link>
 
-        <nav className="nav-links">
+        <div className="nav-search" aria-label="Search">
+          <FaSearch />
+          <input type="text" placeholder="Search courses, lessons, topics..." />
+        </div>
 
-          <Link to="/explore">
-            {currentText.explore}
-          </Link>
-
-          <Link to="/dashboard">
-            {currentText.dashboard}
-          </Link>
-
-          <Link to="/notes">
-            {currentText.notes}
-          </Link>
-
+        <nav className="nav-links" aria-label="Main navigation">
+          <Link to="/explore">{currentText.explore}</Link>
+          <Link to="/dashboard">{currentText.dashboard}</Link>
+          <Link to="/notes">{currentText.notes}</Link>
         </nav>
-
       </div>
 
       <div className="nav-right">
-
         <LanguageSelector />
-
-        <button
-          className="btn small ghost"
-          onClick={() => nav('/login')}
-        >
+        <button className="btn small ghost" onClick={() => nav('/login')}>
           {currentText.login}
         </button>
-
+        <button className="btn small subtle" onClick={handleLogout}>
+          Logout
+        </button>
       </div>
-
     </header>
   )
 }

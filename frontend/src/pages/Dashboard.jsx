@@ -1,6 +1,8 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import CourseCard from '../components/CourseCard'
-import { getCourses, getProgress, me, translate } from '../api'
+import LanguageSelector from '../components/LanguageSelector'
+import { getCourses, getProgress, me, translate, logout } from '../api'
 
 const UI = {
   en: {
@@ -121,6 +123,7 @@ const UI = {
 }
 
 export default function Dashboard() {
+  const nav = useNavigate()
   const [user, setUser] = React.useState(null)
   const [courses, setCourses] = React.useState([])
   const [progress, setProgress] = React.useState([])
@@ -130,6 +133,26 @@ export default function Dashboard() {
   const [loading, setLoading] = React.useState(true)
 
   const t = UI[lang] || UI.en
+
+  function handleNavigate(path) {
+    if (path) nav(path)
+  }
+
+  function handleLogout() {
+    logout()
+    nav('/login')
+  }
+
+  function handleContinueLearning() {
+    if (activeLesson) {
+      nav(`/lessons/${activeLesson._id}`)
+      return
+    }
+
+    if (activeCourse) {
+      nav(`/courses/${activeCourse._id}`)
+    }
+  }
 
   React.useEffect(() => {
     let mounted = true
@@ -213,22 +236,6 @@ export default function Dashboard() {
     }
   }, [lang])
 
-  if (loading) {
-    return (
-      <div className="page">
-        <div
-          style={{
-            padding: 40,
-            textAlign: 'center',
-            fontSize: 18
-          }}
-        >
-          ✨ {t.loading}
-        </div>
-      </div>
-    )
-  }
-
   const completedLessons = progress.filter(
     p => p.completed
   ).length
@@ -282,639 +289,429 @@ export default function Dashboard() {
     )
   }
 
-  return (
-    <div
-      className="page dashboard"
-      style={{
-        background:
-          'linear-gradient(135deg, #fff7fb 0%, #f8f5ff 50%, #fff 100%)',
-        minHeight: '100vh',
-        paddingBottom: 50
-      }}
-    >
+  const activeCourse =
+    courses.find(course => getCourseProgress(course) < 100) ??
+    courses[0] ??
+    null
 
-      {/* HERO */}
+  const activeCourseProgress = activeCourse
+    ? getCourseProgress(activeCourse)
+    : 0
 
-      <section
-        style={{
-          background:
-            'linear-gradient(135deg, #ec4899, #a855f7)',
-          borderRadius: 28,
-          padding: '32px 34px',
-          color: 'white',
-          marginBottom: 26,
-          boxShadow:
-            '0 15px 40px rgba(168, 85, 247, 0.25)',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
-      >
+  const activeLesson =
+    activeCourse?.lessons?.find(lesson =>
+      !progress.some(
+        p =>
+          p.courseId === activeCourse._id &&
+          p.lessonId === lesson._id &&
+          p.completed
+      )
+    ) ??
+    activeCourse?.lessons?.[0] ??
+    null
 
-        <div
-          style={{
-            position: 'absolute',
-            width: 180,
-            height: 180,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.12)',
-            right: -50,
-            top: -60
-          }}
-        />
+  const activeLessonNumber = activeCourse?.lessons?.length
+    ? (activeCourse.lessons.findIndex(
+        lesson => lesson._id === activeLesson?._id
+      ) + 1 || 1)
+    : 0
 
-        <div
-          style={{
-            position: 'absolute',
-            width: 100,
-            height: 100,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.10)',
-            right: 100,
-            bottom: -50
-          }}
-        />
+  const streakDays = React.useMemo(() => {
+    const uniqueDates = new Set()
 
-        <div style={{ position: 'relative' }}>
+    progress.forEach(item => {
+      if (item.lastViewedAt) {
+        const date = new Date(item.lastViewedAt)
+        uniqueDates.add(
+          `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+        )
+      }
 
-          <div
-            style={{
-              fontSize: 14,
-              opacity: 0.9,
-              marginBottom: 8
-            }}
-          >
-            ✨ {t.learningSpace}
-          </div>
-
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 32,
-              fontWeight: 800
-            }}
-          >
-            {t.welcome}, {user?.name || 'Learner'}! 👋
-          </h1>
-
-          <p
-            style={{
-              marginTop: 10,
-              marginBottom: 0,
-              fontSize: 16,
-              opacity: 0.92
-            }}
-          >
-            {t.keepLearning} 💗
-          </p>
-
-        </div>
-      </section>
-
-
-      {/* STAT CARDS */}
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns:
-            'repeat(auto-fit, minmax(190px, 1fr))',
-          gap: 16,
-          marginBottom: 26
-        }}
-      >
-
-        <StatCard
-          icon="📚"
-          title={t.courses}
-          value={courses.length}
-          subtitle={t.available}
-          gradient="linear-gradient(135deg,#fce7f3,#fdf2f8)"
-        />
-
-        <StatCard
-          icon="✅"
-          title={t.completed}
-          value={completedLessons}
-          subtitle={`${t.lessonsOf} ${totalLessons} ${t.lessons}`}
-          gradient="linear-gradient(135deg,#ede9fe,#f5f3ff)"
-        />
-
-        <StatCard
-          icon="🎯"
-          title={t.quizAverage}
-          value={`${averageQuiz}%`}
-          subtitle={
-            quizScores.length
-              ? `${quizScores.length} ${t.attempts}`
-              : t.noQuizzes
+      if (Array.isArray(item.quizScores)) {
+        item.quizScores.forEach(score => {
+          if (score.attemptedAt) {
+            const date = new Date(score.attemptedAt)
+            uniqueDates.add(
+              `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+            )
           }
-          gradient="linear-gradient(135deg,#fef3c7,#fff7ed)"
-        />
+        })
+      }
+    })
 
-        <StatCard
-          icon="🔥"
-          title={t.learningStreak}
-          value="5"
-          subtitle={t.daysRow}
-          gradient="linear-gradient(135deg,#ffe4e6,#fff1f2)"
-        />
+    return Math.max(1, Math.min(7, uniqueDates.size || 1))
+  }, [progress])
 
-      </div>
+  const recentActivity = React.useMemo(() => {
+    const items = []
 
+    progress.forEach(item => {
+      if (item.lastViewedAt) {
+        const course = courses.find(c => c._id === item.courseId)
+        items.push({
+          type: item.completed ? 'complete' : 'progress',
+          label: course?.title || 'Course',
+          detail: item.completed ? 'Completed lesson' : 'Updated course progress',
+          date: new Date(item.lastViewedAt)
+        })
+      }
 
-      {/* PROGRESS + PROFILE */}
+      if (Array.isArray(item.quizScores)) {
+        item.quizScores.forEach(score => {
+          if (score.attemptedAt) {
+            const course = courses.find(c => c._id === item.courseId)
+            items.push({
+              type: 'quiz',
+              label: 'Quiz completed',
+              detail: course?.title || 'Course quiz',
+              date: new Date(score.attemptedAt)
+            })
+          }
+        })
+      }
+    })
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns:
-            'minmax(0, 2fr) minmax(280px, 1fr)',
-          gap: 20,
-          marginBottom: 28
-        }}
-      >
+    return items
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 3)
+  }, [courses, progress])
 
-        {/* OVERALL PROGRESS */}
+  React.useEffect(() => {
+    const body = document.body
+    body.classList.add('dashboard-route')
 
+    return () => {
+      body.classList.remove('dashboard-route')
+    }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="page">
         <div
           style={{
-            background: 'white',
-            borderRadius: 24,
-            padding: 26,
-            boxShadow:
-              '0 8px 30px rgba(80,40,100,0.08)'
+            padding: 40,
+            textAlign: 'center',
+            fontSize: 18
           }}
         >
+          ✨ {t.loading}
+        </div>
+      </div>
+    )
+  }
 
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 18
-            }}
-          >
-
-            <div>
-              <h2 style={{ margin: 0 }}>
-                {t.yourProgress} 📈
-              </h2>
-
-              <p
-                style={{
-                  margin: '6px 0 0',
-                  color: '#777'
-                }}
-              >
-                {t.keepMoving}
-              </p>
-            </div>
-
-            <div
-              style={{
-                fontSize: 28,
-                fontWeight: 800,
-                color: '#ec4899'
-              }}
-            >
-              {overallProgress}%
-            </div>
-
+  return (
+    <div className="dashboard-page-shell">
+      <aside className="dashboard-sidebar">
+        <div className="dashboard-brand-wrap">
+          <div className="dashboard-brand-mark">MLP</div>
+          <div className="dashboard-brand-copy">
+            <span>MLP</span>
+            <small>Learn • Explore • Grow</small>
           </div>
+        </div>
 
-          <div
-            style={{
-              height: 16,
-              background: '#f3e8ff',
-              borderRadius: 20,
-              overflow: 'hidden',
-              marginBottom: 24
-            }}
-          >
-            <div
-              style={{
-                width: `${overallProgress}%`,
-                height: '100%',
-                borderRadius: 20,
-                background:
-                  'linear-gradient(90deg,#ec4899,#a855f7)',
-                transition: 'width .5s ease'
-              }}
+        <nav className="dashboard-sidebar-nav" aria-label="Main navigation">
+          <button type="button" className="dashboard-sidebar-item active" onClick={() => handleNavigate('/dashboard')}>
+            <span>🏠</span>
+            <span>Dashboard</span>
+          </button>
+          <button type="button" className="dashboard-sidebar-item" onClick={() => handleNavigate('/explore')}>
+            <span>📚</span>
+            <span>My Courses</span>
+          </button>
+          <button type="button" className="dashboard-sidebar-item" onClick={() => handleNavigate('/explore')}>
+            <span>🔎</span>
+            <span>Explore</span>
+          </button>
+          <button type="button" className="dashboard-sidebar-item" onClick={() => handleNavigate('/notes')}>
+            <span>📝</span>
+            <span>Notes</span>
+          </button>
+        </nav>
+
+        <div className="dashboard-sidebar-footer">
+          <button type="button" className="dashboard-sidebar-item secondary" onClick={() => handleNavigate('/profile')}>
+            <span>⚙️</span>
+            <span>Settings</span>
+          </button>
+          <button type="button" className="dashboard-sidebar-item secondary" onClick={handleLogout}>
+            <span>↩️</span>
+            <span>Logout</span>
+          </button>
+        </div>
+
+        <div className="dashboard-profile-mini" onClick={() => handleNavigate('/profile')} role="button" tabIndex={0} onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            handleNavigate('/profile')
+          }
+        }}>
+          <div className="dashboard-profile-orbit" />
+          <div className="dashboard-profile-meta">
+            <div className="dashboard-profile-hello">Hello</div>
+            <strong>{user?.name || 'Learner'}</strong>
+          </div>
+        </div>
+      </aside>
+
+      <main className="dashboard-surface">
+        <header className="dashboard-topbar">
+          <div className="dashboard-search">
+            <span>⌕</span>
+            <input
+              type="text"
+              placeholder="Search courses, lessons, or languages..."
+              aria-label="Search"
             />
           </div>
 
-          <h3 style={{ marginBottom: 16 }}>
-            {t.courseProgress}
-          </h3>
+          <div className="dashboard-top-actions">
+            <LanguageSelector />
+            <button type="button" className="dashboard-icon-button" aria-label="Notifications" onClick={() => handleNavigate('/notes')}>
+              🔔
+            </button>
+            <div className="dashboard-profile-pill" aria-label="Profile" onClick={() => handleNavigate('/profile')} role="button" tabIndex={0} onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleNavigate('/profile')
+              }
+            }}>
+              <span>{(user?.name || 'S')?.slice(0, 1)?.toUpperCase() || 'S'}</span>
+            </div>
+          </div>
+        </header>
 
-          {courses.length === 0 ? (
-            <p className="muted">
-              {t.noCourses}
-            </p>
-          ) : (
-            courses.slice(0, 5).map(course => {
+        <div className="dashboard-main-layout">
+          <div className="dashboard-main-column">
+            <section className="dashboard-banner">
+              <div className="dashboard-banner-copy">
+                <span className="dashboard-kicker">{t.learningSpace}</span>
+                <h1>
+                  {t.welcome}, {user?.name || 'Learner'}!
+                </h1>
+                <p>{t.keepLearning}</p>
+              </div>
 
-              const percent =
-                getCourseProgress(course)
+              <div className="dashboard-banner-art" aria-hidden="true">
+                <div className="banner-ball" />
+                <div className="banner-book banner-book-a" />
+                <div className="banner-book banner-book-b" />
+                <div className="banner-book banner-book-c" />
+                <div className="banner-spark spark-1" />
+                <div className="banner-spark spark-2" />
+              </div>
+            </section>
 
-              return (
-                <div
-                  key={course._id}
-                  style={{
-                    marginBottom: 17
-                  }}
-                >
+            <div className="dashboard-stats">
+              <StatCard
+                icon="📚"
+                title={t.courses}
+                value={courses.length}
+                subtitle={t.available}
+                gradient="linear-gradient(135deg, #f8f0ff, #f4f7ff)"
+              />
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent:
-                        'space-between',
-                      marginBottom: 7,
-                      fontSize: 14,
-                      fontWeight: 600
-                    }}
-                  >
+              <StatCard
+                icon="📈"
+                title={t.yourProgress}
+                value={`${overallProgress}%`}
+                subtitle={`${completedLessons}/${totalLessons} ${t.lessons}`}
+                gradient="linear-gradient(135deg, #edfdf6, #f3f8ff)"
+              />
 
-                    <span>
-                      {course.title}
-                    </span>
+              <StatCard
+                icon="🎯"
+                title={t.quizAverage}
+                value={`${averageQuiz}%`}
+                subtitle={
+                  quizScores.length
+                    ? `${quizScores.length} ${t.attempts}`
+                    : t.noQuizzes
+                }
+                gradient="linear-gradient(135deg, #fff4eb, #fffaf1)"
+              />
+            </div>
 
-                    <span
-                      style={{
-                        color: '#ec4899'
-                      }}
-                    >
-                      {percent}%
-                    </span>
-
-                  </div>
-
-                  <div
-                    style={{
-                      height: 9,
-                      background: '#f3f4f6',
-                      borderRadius: 10,
-                      overflow: 'hidden'
-                    }}
-                  >
-
-                    <div
-                      style={{
-                        width: `${percent}%`,
-                        height: '100%',
-                        borderRadius: 10,
-                        background:
-                          'linear-gradient(90deg,#f472b6,#8b5cf6)'
-                      }}
-                    />
-
-                  </div>
-
+            <section className="dashboard-panel dashboard-continue-panel">
+              <div className="dashboard-panel-header">
+                <div>
+                  <span className="dashboard-kicker">{t.continueLearning}</span>
+                  <h2>{t.pickUp}</h2>
                 </div>
-              )
-            })
-          )}
-
-        </div>
-
-
-        {/* PROFILE */}
-
-        <div
-          style={{
-            background:
-              'linear-gradient(160deg,#fff1f7,#f5f3ff)',
-            borderRadius: 24,
-            padding: 26,
-            boxShadow:
-              '0 8px 30px rgba(80,40,100,0.08)'
-          }}
-        >
-
-          <div
-            style={{
-              fontSize: 14,
-              color: '#a855f7',
-              fontWeight: 700,
-              marginBottom: 18
-            }}
-          >
-            {t.myProfile}
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14
-            }}
-          >
-
-            <div
-              style={{
-                width: 65,
-                height: 65,
-                borderRadius: '50%',
-                background:
-                  'linear-gradient(135deg,#ec4899,#8b5cf6)',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 28,
-                fontWeight: 800,
-                boxShadow:
-                  '0 8px 20px rgba(236,72,153,.25)'
-              }}
-            >
-              {user?.name?.slice(0, 1)?.toUpperCase() || 'L'}
-            </div>
-
-            <div>
-
-              <div
-                style={{
-                  fontSize: 18,
-                  fontWeight: 800
-                }}
-              >
-                {user?.name || 'Learner'}
+                <button type="button" className="dashboard-panel-link" onClick={() => handleNavigate('/explore')}>
+                  View All →
+                </button>
               </div>
 
-              <div
-                style={{
-                  color: '#777',
-                  fontSize: 13,
-                  marginTop: 4
-                }}
-              >
-                {user?.email}
+              <div className="continue-course-card">
+                <div className="continue-visual">
+                  {activeCourse?.title?.slice(0, 1)?.toUpperCase() || 'L'}
+                </div>
+
+                <div className="continue-copy">
+                  <span className="course-pill">{activeCourse?.title || t.course}</span>
+                  <h3>{activeCourse?.title || '—'}</h3>
+                  <p>{activeLesson ? activeLesson.title : 'No lesson available'}</p>
+                </div>
+
+                <div className="continue-progress-meta">
+                  <span>{activeCourseProgress}%</span>
+                  <a
+                    className="dashboard-action"
+                    href={
+                      activeLesson
+                        ? `/lessons/${activeLesson._id}`
+                        : activeCourse
+                          ? `/courses/${activeCourse._id}`
+                          : '#'
+                    }
+                    onClick={(event) => {
+                      event.preventDefault()
+                      handleContinueLearning()
+                    }}
+                  >
+                    Continue →
+                  </a>
+                </div>
               </div>
 
-            </div>
-
-          </div>
-
-          <div
-            style={{
-              marginTop: 26,
-              padding: 16,
-              background: 'rgba(255,255,255,.75)',
-              borderRadius: 18
-            }}
-          >
-
-            <div
-              style={{
-                fontSize: 13,
-                color: '#777'
-              }}
-            >
-              {t.learningLanguage}
-            </div>
-
-            <div
-              style={{
-                marginTop: 5,
-                fontSize: 18,
-                fontWeight: 800,
-                color: '#ec4899'
-              }}
-            >
-              🌐 {lang.toUpperCase()}
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      {/* CONTINUE LEARNING */}
-
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 15
-        }}
-      >
-
-        <div>
-
-          <h2 style={{ margin: 0 }}>
-            {t.continueLearning} 🚀
-          </h2>
-
-          <p
-            style={{
-              margin: '5px 0 0',
-              color: '#777'
-            }}
-          >
-            {t.pickUp}
-          </p>
-
-        </div>
-
-      </div>
-
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns:
-            'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 18,
-          marginBottom: 32
-        }}
-      >
-
-        {courses.slice(0, 2).map(course => {
-
-          const percent =
-            getCourseProgress(course)
-
-          return (
-            <div
-              key={course._id}
-              style={{
-                background: 'white',
-                borderRadius: 24,
-                padding: 22,
-                boxShadow:
-                  '0 8px 30px rgba(80,40,100,0.08)',
-                border:
-                  '1px solid rgba(236,72,153,.08)'
-              }}
-            >
-
-              <div
-                style={{
-                  fontSize: 13,
-                  color: '#ec4899',
-                  fontWeight: 700
-                }}
-              >
-                📖 {t.course}
+              <div className="continue-meta-row">
+                <div className="continue-status">
+                  <span className="status-label">Last active</span>
+                  <strong>
+                    {activeLesson ? activeLesson.title : 'No lesson available'}
+                  </strong>
+                </div>
+                <div className="continue-status right">
+                  <span className="status-label">Progress</span>
+                  <strong>{activeCourseProgress}%</strong>
+                </div>
               </div>
 
-              <h3 style={{ margin: '8px 0' }}>
-                {course.title}
-              </h3>
-
-              <p
-                style={{
-                  color: '#777',
-                  fontSize: 14,
-                  lineHeight: 1.5
-                }}
-              >
-                {course.descriptionOriginal}
-              </p>
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  marginTop: 15,
-                  marginBottom: 7,
-                  fontSize: 13
-                }}
-              >
-                <span>{t.progress}</span>
-                <strong>{percent}%</strong>
-              </div>
-
-              <div
-                style={{
-                  height: 9,
-                  background: '#f3f4f6',
-                  borderRadius: 10,
-                  overflow: 'hidden'
-                }}
-              >
-
+              <div className="progress-track">
                 <div
-                  style={{
-                    width: `${percent}%`,
-                    height: '100%',
-                    background:
-                      'linear-gradient(90deg,#ec4899,#a855f7)',
-                    borderRadius: 10
-                  }}
+                  className="progress-fill"
+                  style={{ width: `${activeCourseProgress}%` }}
                 />
-
               </div>
 
-              <a
-                href={`/courses/${course._id}`}
-                style={{
-                  display: 'inline-block',
-                  marginTop: 18,
-                  padding: '11px 20px',
-                  borderRadius: 14,
-                  color: 'white',
-                  textDecoration: 'none',
-                  fontWeight: 700,
-                  background:
-                    'linear-gradient(135deg,#ec4899,#a855f7)',
-                  boxShadow:
-                    '0 6px 15px rgba(168,85,247,.2)'
-                }}
-              >
-                {t.continueLearning} →
-              </a>
+              <div className="continue-footer">
+                <div className="continue-metric">
+                  <span>{t.lessons}</span>
+                  <strong>
+                    {activeCourse?.lessons?.length ? `${activeLessonNumber}/${activeCourse.lessons.length}` : '0/0'}
+                  </strong>
+                </div>
+                <div className="continue-metric">
+                  <span>{t.progress}</span>
+                  <strong>{activeCourseProgress}%</strong>
+                </div>
+              </div>
+            </section>
 
+            <section className="dashboard-explore-panel">
+              <div className="dashboard-panel-header compact">
+                <div>
+                  <h3>{t.exploreLearn}</h3>
+                  <p>{t.discover}</p>
+                </div>
+                <button type="button" className="dashboard-panel-link" onClick={() => handleNavigate('/explore')}>View All →</button>
+              </div>
+
+              <div className="dashboard-course-grid">
+                {courses.map(course => (
+                  <CourseCard
+                    key={course._id}
+                    course={course}
+                    onOpen={(selectedCourse) => handleNavigate(`/courses/${selectedCourse._id}`)}
+                  />
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <aside className="dashboard-rail">
+            <div className="dashboard-panel dashboard-rail-panel">
+              <h3>Quick Actions</h3>
+              <button type="button" className="quick-action-item" onClick={() => handleNavigate('/explore')}>
+                <span>📘</span>
+                <span>Explore Courses</span>
+                <small>→</small>
+              </button>
+              <button type="button" className="quick-action-item" onClick={() => handleNavigate('/explore')}>
+                <span>📝</span>
+                <span>Take a Quiz</span>
+                <small>→</small>
+              </button>
+              <button type="button" className="quick-action-item" onClick={() => handleNavigate('/dashboard')}>
+                <span>📊</span>
+                <span>View Progress</span>
+                <small>→</small>
+              </button>
+              <button type="button" className="quick-action-item" onClick={() => handleNavigate('/notes')}>
+                <span>✏️</span>
+                <span>Add Note</span>
+                <small>→</small>
+              </button>
             </div>
-          )
-        })}
 
-      </div>
+            <div className="dashboard-panel dashboard-rail-panel compact-panel">
+              <h3>Learning Streak</h3>
+              <div className="streak-number">{streakDays} days</div>
+              <p>Keep it up!</p>
+              <div className="streak-row" aria-label="Weekly learning streak">
+                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
+                  <span key={day + index} className={index < streakDays ? 'active' : ''}>{day}</span>
+                ))}
+              </div>
+            </div>
 
+            <div className="dashboard-panel dashboard-rail-panel activity-panel">
+              <div className="panel-header-inline">
+                <h3>Recent Activity</h3>
+                <button type="button" className="dashboard-panel-link" onClick={() => handleNavigate('/notes')}>View All →</button>
+              </div>
 
-      {/* EXPLORE */}
-
-      <div style={{ marginBottom: 15 }}>
-
-        <h2 style={{ margin: 0 }}>
-          {t.exploreLearn} 💡
-        </h2>
-
-        <p
-          style={{
-            margin: '5px 0 0',
-            color: '#777'
-          }}
-        >
-          {t.discover}
-        </p>
-
-      </div>
-
-      <div className="grid">
-
-        {courses.map(course => (
-          <CourseCard
-            key={course._id}
-            course={course}
-          />
-        ))}
-
-      </div>
-
+              <div className="activity-list">
+                {recentActivity.length > 0 ? (
+                  recentActivity.map((item, index) => (
+                    <div key={`${item.label}-${index}`} className="activity-item">
+                      <span className={`activity-icon ${item.type}`}>
+                        {item.type === 'complete' ? '✓' : item.type === 'quiz' ? '🏆' : '📘'}
+                      </span>
+                      <div className="activity-copy">
+                        <strong>{item.label}</strong>
+                        <small>{item.detail}</small>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="activity-item empty">
+                    <span className="activity-icon">📖</span>
+                    <div className="activity-copy">
+                      <strong>No activity yet</strong>
+                      <small>Start learning to see updates here.</small>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
     </div>
   )
 }
 
-function StatCard({ icon, title, value, subtitle }) {
+function StatCard({ icon, title, value, subtitle, gradient }) {
   return (
-    <div
-      style={{
-        background: '#fff',
-        borderRadius: 20,
-        padding: 22,
-        boxShadow: '0 8px 25px rgba(120,80,150,.08)',
-        border: '1px solid #f1e5f5'
-      }}
-    >
-      <div style={{ fontSize: 28 }}>
-        {icon}
-      </div>
-
-      <div
-        style={{
-          fontSize: 14,
-          color: '#777',
-          marginTop: 8
-        }}
-      >
-        {title}
-      </div>
-
-      <div
-        style={{
-          fontSize: 28,
-          fontWeight: 700,
-          color: '#8e44ad',
-          marginTop: 4
-        }}
-      >
-        {value}
-      </div>
-
-      <div
-        style={{
-          fontSize: 13,
-          color: '#999',
-          marginTop: 4
-        }}
-      >
-        {subtitle}
-      </div>
+    <div className="dashboard-stat-card" style={{ background: gradient }}>
+      <div className="dashboard-stat-icon">{icon}</div>
+      <div className="dashboard-stat-title">{title}</div>
+      <div className="dashboard-stat-value">{value}</div>
+      <div className="dashboard-stat-subtitle">{subtitle}</div>
     </div>
   )
 }
